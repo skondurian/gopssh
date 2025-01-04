@@ -68,12 +68,17 @@ func (client *SSHClient) run(cmd string) *CmdResult {
 	var out, err bytes.Buffer
 	client.session.Stderr = &err
 	client.session.Stdout = &out
+	if err := client.session.RequestPty("xterm", 80, 40, ssh.TerminalModes{}); err != nil {
+		return &CmdResult{
+			stdout: "",
+			stderr: err.Error(),
+		}
+	}
 	if err := client.session.Run(cmd); err != nil {
 		return &CmdResult{
 			stdout: "",
 			stderr: err.Error(),
 		}
-		//
 	}
 	return &CmdResult{
 		stdout: out.String(),
