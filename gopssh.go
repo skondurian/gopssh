@@ -5,24 +5,14 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime"
 	"slices"
+	"strings"
 )
 
 // main program class
 type GopSSH struct {
-	cmd        string
-	hosts      []string
-	user       string
-	key        string
-	parallel   int
-	timeout    int
-	outdir     string
-	errdir     string
-	inline     bool
-	inline_out bool
-	send_input bool
-	results    map[string]chan *CmdResult
+	Args
+	results map[string]chan *CmdResult
 }
 
 // main
@@ -36,42 +26,39 @@ func (gopssh *GopSSH) Main() int {
 
 // populate GopSSH fields from cmdline args
 func (gopssh *GopSSH) read_args() {
-	gopssh.cmd = ARGS.Command
-	if ARGS.Hosts != "" {
+	gopssh.Command = ARGS.Command
+	if ARGS.Hostfile != "" {
 		// add hosts from host file, if specified
-		gopssh.hosts = append(gopssh.hosts, *read_hosts_from_host_file()...)
+		gopssh.Hosts += read_hosts_from_host_file()
 	}
-	for _, e := range ARGS.Host {
-		if !slices.Contains(gopssh.hosts, e) {
-			gopssh.hosts = append(gopssh.hosts, e)
+	for _, e := range strings.Fields(ARGS.Hosts) {
+		if !slices.Contains(strings.Fields(gopssh.Hosts), e) {
+			gopssh.Hosts += e + " "
 		}
 	}
 	if ARGS.User == "" {
-		gopssh.user = os.Getenv("USER")
+		gopssh.User = os.Getenv("USER")
 	}
-	gopssh.key = ARGS.Key
-	if ARGS.Par == 0 {
-		gopssh.parallel = runtime.NumCPU()
-	}
-	gopssh.timeout = ARGS.Timeout
-	gopssh.outdir = ARGS.Outdir
-	gopssh.errdir = ARGS.Errdir
-	gopssh.inline = ARGS.Inline
-	gopssh.inline_out = ARGS.Inline_Stdout
-	gopssh.send_input = ARGS.Send_Input
+	gopssh.Key = ARGS.Key
+	// gopssh.Timeout = ARGS.Timeout
+	// gopssh.Outdir = ARGS.Outdir
+	// gopssh.Errdir = ARGS.Errdir
+	// gopssh.Inline = ARGS.Inline
+	// gopssh.Inline_Stdout = ARGS.Inline_Stdout
+	gopssh.Send_Input = ARGS.Send_Input
 }
 
 func (gopssh *GopSSH) exec_command() {
-	for _, host := range gopssh.hosts {
+	for _, host := range strings.Fields(gopssh.Hosts) {
 		ssh_client := SSHClient{
 			hostname: host,
 			port:     22,
-			user:     gopssh.user,
-			key:      gopssh.key,
+			user:     gopssh.User,
+			key:      gopssh.Key,
 		}
 		ch := make(chan *CmdResult)
 		gopssh.results[host] = ch
-		go ssh_client.ExecCmd(gopssh.cmd, ch)
+		go ssh_client.ExecCmd(gopssh.Command, ch)
 	}
 }
 
@@ -79,10 +66,11 @@ func (gopssh *GopSSH) exec_command() {
 // returns exit code 0 if all went fine, 0xff otherwise
 func (gopssh *GopSSH) print_out_results() int {
 	exit_code := 0
-	for _, host := range gopssh.hosts {
-		result := <-gopssh.results[host]
-		fmt.Printf("[%s] STDOUT>\n%s\n", host, result.stdout)
-		fmt.Printf("[%s] STDERR>\n%s\n", host, result.stderr)
+	var result *CmdResult
+	for _, host := range strings.Fields(gopssh.Hosts) {
+		result = <-gopssh.results[host]
+		fmt.Printf("[%s] STDOUT:\n%s\n", host, result.stdout)
+		fmt.Printf("[%s] STDERR:\n%s\n", host, result.stderr)
 	}
 	return exit_code
 }
@@ -90,10 +78,10 @@ func (gopssh *GopSSH) print_out_results() int {
 /* functions */
 
 // read host file (if any) and return list of hostnames
-func read_hosts_from_host_file() *[]string {
-	content, err := os.ReadFile(ARGS.Hosts)
+func read_hosts_from_host_file() string {
+	content, err := os.ReadFile(ARGS.Hostfile)
 	if err != nil {
-		log.Panicf("unable to read host file: %s", ARGS.Hosts)
+		log.Panicf("unable to read host file: %s", ARGS.Hostfile)
 	}
 	// replacing spaces with newlines
 	for i, b := range content {
@@ -111,5 +99,5 @@ func read_hosts_from_host_file() *[]string {
 			result = append(result, trimmed)
 		}
 	}
-	return &result
+	return strings.Join(result, " ")
 }
