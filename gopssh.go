@@ -56,7 +56,7 @@ func (gopssh *GopSSH) exec_command() {
 			user:     gopssh.User,
 			key:      gopssh.Key,
 		}
-		ch := make(chan *CmdResult)
+		ch := make(chan *CmdResult, 1)
 		gopssh.results[host] = ch
 		go ssh_client.ExecCmd(gopssh.Command, ch)
 	}
